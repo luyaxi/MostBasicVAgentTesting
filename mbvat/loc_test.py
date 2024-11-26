@@ -12,6 +12,7 @@ from .build_loc_testset import COMMON_RESOLUTIONS,VALID_RESOLUTIONS,build_full_l
 from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000
+from scipy.ndimage import zoom
 
 def calculate_color_delta(color1,color2):
     c1 = sRGBColor(color1[0],color1[1],color1[2])
@@ -82,7 +83,7 @@ class LocalizationTester:
                 timeout_limit = 3  # Set the limit for timeout occurrences
 
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED, timeout=15)
-                while pending:
+                while pending or done:
                     if not done:
                         timeout_counter += 1
                         if timeout_counter >= timeout_limit:
@@ -110,6 +111,8 @@ class LocalizationTester:
                                 preds.append(ret)
                         else:
                             print(f"Unknown index: {idx}")
+                    if not pending:
+                        break
                     done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=15)
 
                 meta["Discernible"] = sum(labels)/len(labels) > 0.5
@@ -122,14 +125,23 @@ class LocalizationTester:
                     }
                 })
                 print(meta)
-                draw_res_correctness(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
-                for idx,t in enumerate(statics[-1]["results"]["test"]):
-                    statics[-1]["results"]["test"][idx] = t.model_dump()
-                json.dump(statics[-1],open(os.path.join(save_path,f"{subset_idx}.json"),"w"))
+                
+                if save_path is not None:    
+                    draw_res_correctness(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
+                    for idx,t in enumerate(statics[-1]["results"]["test"]):
+                        statics[-1]["results"]["test"][idx] = t.model_dump()
+                    json.dump(statics[-1],open(os.path.join(save_path,f"{subset_idx}.json"),"w"))
+                else:
+                    draw_res_correctness(statics[-1])
         return statics
     
 
-def draw_res_correctness(statics, sigma:float = None, save_path:str = None):
+def draw_res_correctness(
+    statics, 
+    sigma:float = None, 
+    save_path:str = None,
+    super_res_factor = 1  # Default to 4x resolution increase
+    ):
     res_x,res_y = statics["meta"]["Resolution"]
     ws_ratio:float = statics["meta"]["Windows Ratio"]
     x = []
@@ -175,10 +187,16 @@ def draw_res_correctness(statics, sigma:float = None, save_path:str = None):
         out=np.zeros_like(true_counts),  # 避免除以零
         where=total_counts != 0
     )
+    if sigma is None and super_res_factor > 1:
+        sigma = super_res_factor / 2  # Add appropriate smoothing
+    if super_res_factor > 1:
+        accuracy = zoom(accuracy, zoom=super_res_factor, order=3)
+    else:
+        accuracy[total_counts==0] = np.nan
+    
     if sigma is not None:
         accuracy = gaussian_filter(accuracy, sigma=sigma)
 
-    accuracy[total_counts==0] = np.nan
 
     plt.figure(figsize=(8,8*(res_y/res_x)+0.5))
     cmap = plt.get_cmap('RdYlGn')
