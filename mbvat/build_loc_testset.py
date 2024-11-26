@@ -181,13 +181,8 @@ def build_full_localization_test(
             minimum_square_len = math.floor(math.sqrt(windows_area))
             
             # 计算接近min_samples的行数和列数
-            cols = math.ceil(2*width/minimum_square_len*math.sqrt(max_repeat_times))
-            rows = math.ceil(2*height/minimum_square_len*math.sqrt(max_repeat_times))
-            
-            if cols*rows < 250:
-                scale_ratio = math.sqrt(250/(cols*rows))
-                cols = int(cols*scale_ratio)
-                rows = int(rows*scale_ratio)
+            cols = math.ceil(2*width/minimum_square_len)
+            rows = math.ceil(2*height/minimum_square_len)
             
             # 生成网格点
             x = np.linspace(0, width, cols)
@@ -207,6 +202,13 @@ def build_full_localization_test(
             
             # 应用偏移
             shifted_points = grid_points + np.column_stack([shifts_x, shifts_y])
+            for _ in range(max_repeat_times-1):
+                shifts_x_new = (np.random.rand(*grid_points[:, 0].shape) - 0.5) * x_spacing
+                shifts_y_new = (np.random.rand(*grid_points[:, 1].shape) - 0.5) * y_spacing
+                shifted_new = grid_points + np.column_stack([shifts_x_new, shifts_y_new])
+                shifted_new[:, 0] = np.clip(shifted_new[:, 0], 0, width - 1)
+                shifted_new[:, 1] = np.clip(shifted_new[:, 1], 0, height - 1)
+                shifted_points = np.vstack([shifted_points, shifted_new])
 
             # 确保偏移后的点在边界内
             shifted_points[:, 0] = np.clip(shifted_points[:, 0], 0, width-1)
