@@ -5,9 +5,12 @@ from typing import Literal
 from openai import AsyncOpenAI
 import base64
 import json
+import re
+import random
 from .loc_test import LocalizationTester,LocaliationTestItem,Position,draw_res_correctness
 
-sem = asyncio.Semaphore(1)
+
+sem = asyncio.Semaphore(64)
 async def completions(item:LocaliationTestItem)->Position:
     async with sem:
         img= item.draw()
@@ -16,19 +19,40 @@ async def completions(item:LocaliationTestItem)->Position:
         img.save(img_io, "JPEG")
         img_io.seek(0)
 
-        prompt = f"Please point out where the {item.obj.shape} is in form of <point>x,y</point>"
-        client = AsyncOpenAI()
+        prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>"
+        client = AsyncOpenAI(
+            api_key="sk-1234",
+            base_url="http://localhost:8000/v1"
+        )
         response = await client.chat.completions.create(
             messages=[
                 {"role":"user",
                     "content":[
                     {"type":"text","text":prompt},
-                    {"type":"image_url","image_url":"data:image/jpeg;base64,"+base64.b64encode(img_io).decode()},
+                    {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+base64.b64encode(img_io.read()).decode()}},
                 ]}
             ],
-            model="Qwen2-VL"
+            model="qwen2vl"
         )
         response = response.choices[0].message.content
+        # extract the point
+        try:
+            s = response.split("<point>")[-1].split("</point>")[0]
+            x = s.split(",")
+            if len(x) == 2:
+                x,y = x
+                return Position(x=int(x),y=int(y))
+            elif len(x) == 4:
+                return [int(i) for i in x]
+            else:
+                raise ValueError(f"Unkown point format: {x}")
+        except:
+
+            print("No point found: ",response)
+            x = random.randint(0,item.res.width)
+            y = random.randint(0,item.res.height)
+            return Position(x=x,y=y)
+
 
 async def random_pointer(item:LocaliationTestItem):
     import random
@@ -38,7 +62,8 @@ async def random_pointer(item:LocaliationTestItem):
 
 def main(
     test:Literal["localization"]="localization",
-    random_test:bool = True
+    random_test:bool = False,
+    save_path:str = "results"
 ):
     match test:
         case "localization":
@@ -46,17 +71,9 @@ def main(
 
 
             if random_test:
-                results = asyncio.run(tester.run(random_pointer))
+                results = asyncio.run(tester.run(random_pointer,save_path=save_path))
             else:
-                results = asyncio.run(tester.run(completions))
-
-            for i,item in enumerate(results):
-                draw_res_correctness(item, save_path=f"results/{i}.png")
-                ret = item
-                for idx,t in enumerate(ret["results"]["test"]):
-                    ret["results"]["test"][idx] = t.model_dump()
-                    
-                json.dump(ret,open(f"results/{i}.json","w"))
+                results = asyncio.run(tester.run(completions,save_path=save_path))
         
         case _:
             raise ValueError(f"Unkown test {test}")

@@ -14,17 +14,6 @@ import random
 import math
 import numpy as np
 
-from colormath.color_objects import sRGBColor, LabColor
-from colormath.color_conversions import convert_color
-from colormath.color_diff import delta_e_cie2000
-
-def calculate_color_delta(color1,color2):
-    c1 = sRGBColor(color1[0],color1[1],color1[2])
-    c2 = sRGBColor(color2[0],color2[1],color2[2])
-    c1_lab = convert_color(c1,LabColor)
-    c2_lab = convert_color(c2,LabColor)
-    return delta_e_cie2000(c1_lab, c2_lab)
-
 VALID_RESOLUTIONS = [
     # regular desktop resolution
     (1024, 768),
@@ -188,11 +177,11 @@ def build_full_localization_test(
             width,height = res
             # calculate how many samples is sufficient for the ws
             windows_area = int(ws*width*height)
-            minimum_square_len = math.ceil(math.sqrt(windows_area))
+            minimum_square_len = math.floor(math.sqrt(windows_area))
 
             # 计算接近min_samples的行数和列数
-            cols = int(2*width/minimum_square_len*math.sqrt(max_repeat_times))
-            rows = int(2*height/minimum_square_len*math.sqrt(max_repeat_times))
+            cols = math.ceil(2*width/minimum_square_len*math.sqrt(max_repeat_times))
+            rows = math.ceil(2*height/minimum_square_len*math.sqrt(max_repeat_times))
             
             # 生成网格点
             x = np.linspace(0, width, cols)
