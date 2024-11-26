@@ -181,8 +181,8 @@ def build_full_localization_test(
             minimum_square_len = math.floor(math.sqrt(windows_area))
             
             # 计算接近min_samples的行数和列数
-            cols = math.ceil(2*width/minimum_square_len*max_repeat_times)
-            rows = math.ceil(2*height/minimum_square_len*max_repeat_times)
+            cols = math.ceil(2*width/minimum_square_len*math.sqrt(max_repeat_times))
+            rows = math.ceil(2*height/minimum_square_len*math.sqrt(max_repeat_times))
             
             if cols*rows < 250:
                 scale_ratio = math.sqrt(250/(cols*rows))
