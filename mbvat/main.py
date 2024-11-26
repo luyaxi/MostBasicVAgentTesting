@@ -10,7 +10,7 @@ import random
 from .loc_test import LocalizationTester,LocaliationTestItem,Position,draw_res_correctness
 
 
-sem = asyncio.Semaphore(64)
+sem = asyncio.Semaphore(32)
 async def completions(item:LocaliationTestItem)->Position:
     async with sem:
         img= item.draw()
@@ -19,7 +19,7 @@ async def completions(item:LocaliationTestItem)->Position:
         img.save(img_io, "JPEG")
         img_io.seek(0)
 
-        prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>"
+        prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>, where x and y range from 0 to 1000."
         client = AsyncOpenAI(
             api_key="sk-1234",
             base_url="http://localhost:8000/v1"
@@ -41,14 +41,12 @@ async def completions(item:LocaliationTestItem)->Position:
             x = s.split(",")
             if len(x) == 2:
                 x,y = x
-                return Position(x=int(x),y=int(y))
-            elif len(x) == 4:
-                return [int(i) for i in x]
+                return Position(x=int(int(x)/1000*item.res.width),y=int(int(y)/1000*item.res.height))
             else:
                 raise ValueError(f"Unkown point format: {x}")
         except:
 
-            print("No point found: ",response)
+            # print("No point found: ",response)
             x = random.randint(0,item.res.width)
             y = random.randint(0,item.res.height)
             return Position(x=x,y=y)
@@ -67,7 +65,7 @@ def main(
 ):
     match test:
         case "localization":
-            tester = LocalizationTester()
+            tester = LocalizationTester(max_repeat_times=5)
 
 
             if random_test:

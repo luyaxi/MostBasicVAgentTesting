@@ -179,10 +179,15 @@ def build_full_localization_test(
             # calculate how many samples is sufficient for the ws
             windows_area = int(ws*width*height)
             minimum_square_len = math.floor(math.sqrt(windows_area))
-
+            
             # 计算接近min_samples的行数和列数
-            cols = math.ceil(2*width/minimum_square_len*math.sqrt(max_repeat_times))
-            rows = math.ceil(2*height/minimum_square_len*math.sqrt(max_repeat_times))
+            cols = math.ceil(2*width/minimum_square_len*max_repeat_times)
+            rows = math.ceil(2*height/minimum_square_len*max_repeat_times)
+            
+            if cols*rows < 250:
+                scale_ratio = math.sqrt(250/(cols*rows))
+                cols = int(cols*scale_ratio)
+                rows = int(rows*scale_ratio)
             
             # 生成网格点
             x = np.linspace(0, width, cols)

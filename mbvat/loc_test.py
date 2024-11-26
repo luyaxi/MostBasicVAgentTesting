@@ -70,16 +70,27 @@ class LocalizationTester:
                     "Resolution": res,
                     "Colorful": self.colorful
                 }
-                tasks = [asyncio.create_task(completion_func(
+                tasks = [asyncio.create_task(
+                    completion_func(
                     item), name=str(idx)) for idx, item in enumerate(subset)]
-
 
                 test = []
                 labels = []
                 preds = []
-                pbar = tqdm(total=len(tasks),ncols=150)
-                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                pbar = tqdm(total=len(tasks), ncols=150)
+                timeout_counter = 0
+                timeout_limit = 3  # Set the limit for timeout occurrences
+
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED, timeout=15)
                 while pending:
+                    if not done:
+                        timeout_counter += 1
+                        if timeout_counter >= timeout_limit:
+                            print("Timeout limit reached, exiting loop.")
+                            break
+                    else:
+                        timeout_counter = 0  # Reset counter if tasks are done
+
                     for item in done:
                         try:
                             ret = await item
@@ -93,14 +104,13 @@ class LocalizationTester:
                             test.append(t)
                             if isinstance(ret, Position):
                                 labels.append(t.validate_point(ret))
-                                preds.append([ret.x,ret.y])
+                                preds.append([ret.x, ret.y])
                             else:
                                 labels.append(t.validate_bbox(ret))
                                 preds.append(ret)
                         else:
-                            print(f"Unkown index: {idx}")
-                    done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-                
+                            print(f"Unknown index: {idx}")
+                    done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=15)
 
                 meta["Discernible"] = sum(labels)/len(labels) > 0.5
                 statics.append({
@@ -185,7 +195,7 @@ def draw_res_correctness(statics, sigma:float = None, save_path:str = None):
     plt.colorbar(img, orientation='vertical')
 
     plt.gca().set_aspect('equal', adjustable='box')  # 设置纵横比为1:1
-    plt.title(f'Windows Ratio: {ws_ratio}\nResolution: {res_x}x{res_y}')
+    plt.title(f'Windows Ratio: {ws_ratio}\nResolution: {res_x}x{res_y}\nCorrectness: {sum(labels)}/{len(labels)}')
 
     if save_path is not None:
         plt.savefig(save_path)
