@@ -165,7 +165,8 @@ def build_full_localization_test(
         resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
         windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
         max_repeat_times: int = 1,
-        delta_size=0.2
+        delta_size=0.2,
+        colorful=False
         ) -> dict[float, dict[tuple[int, int], list[LocaliationTestItem]]]:
     dataset = {}
     total_size = 0
@@ -206,7 +207,7 @@ def build_full_localization_test(
             shifted_points[:, 0] = np.clip(shifted_points[:, 0], 0, width-1)
             shifted_points[:, 1] = np.clip(shifted_points[:, 1], 0, height-1)
 
-            def sample_objects(random_color = False):
+            def sample_objects():
                 objs_type = np.random.randint(2,size=len(shifted_points))
                 objs_area = ws*(
                     1+np.random.uniform(
@@ -214,7 +215,7 @@ def build_full_localization_test(
                         delta_size,
                         len(shifted_points))
                         )*width*height
-                if random_color:
+                if colorful:
                     color1 = np.random.randint(0,255,(len(shifted_points),3))
                     color2 = np.random.randint(0,255,(len(shifted_points),3))
                 else:
@@ -272,12 +273,7 @@ def build_full_localization_test(
                         background=c2
                     ))
 
-
-
-            # sample simple colors with black and white background
-            sample_objects(random_color=False)
-            sample_objects(random_color=True)
-
+            sample_objects()
             # print(f"Res: {res}, ws: {ws}, total: {len(dataset[res][ws])}")
             total_size += len(dataset[res][ws])
     # print("Total: ",total_size)

@@ -22,16 +22,22 @@ def calculate_color_delta(color1,color2):
 
 class LocalizationTester:
     def __init__(
-            self,
-            resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
-            windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
-            max_repeat_times: int = 1
+        self,
+        resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
+        windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
+        colorful:bool=False,
+        max_repeat_times: int = 1
     ):
         self.data = build_full_localization_test(
             resolutions=resolutions,
             windows_ratio=windows_ratio,
-            max_repeat_times=max_repeat_times
+            max_repeat_times=max_repeat_times,
+            colorful=colorful
         )
+        self.resolutions = resolutions
+        self.windows_ratio = windows_ratio
+        self.colorful = colorful
+        self.max_repeat_times = max_repeat_times
 
     def __len__(self):
         total = 0
@@ -62,6 +68,7 @@ class LocalizationTester:
                 meta = {
                     "Windows Ratio": ws,
                     "Resolution": res,
+                    "Colorful": self.colorful
                 }
                 tasks = [asyncio.create_task(completion_func(
                     item), name=str(idx)) for idx, item in enumerate(subset)]
@@ -69,6 +76,7 @@ class LocalizationTester:
 
                 test = []
                 labels = []
+                preds = []
                 pbar = tqdm(total=len(tasks),ncols=150)
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 while pending:
@@ -85,8 +93,10 @@ class LocalizationTester:
                             test.append(t)
                             if isinstance(ret, Position):
                                 labels.append(t.validate_point(ret))
+                                preds.append([ret.x,ret.y])
                             else:
                                 labels.append(t.validate_bbox(ret))
+                                preds.append(ret)
                         else:
                             print(f"Unkown index: {idx}")
                     done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -97,7 +107,8 @@ class LocalizationTester:
                     "meta": meta,
                     "results": {
                         "test":test,
-                        "labels": labels
+                        "labels": labels,
+                        "preds": preds
                     }
                 })
                 print(meta)
