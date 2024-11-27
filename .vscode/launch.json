@@ -17,7 +17,7 @@
             ]
         },
         {
-            "name": "测试程序",
+            "name": "测试程序-颜色",
             "type": "debugpy",
             "request": "launch",
             "module": "mbvat.main",

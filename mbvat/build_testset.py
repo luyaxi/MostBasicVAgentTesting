@@ -15,8 +15,7 @@ import asyncio
 from tqdm import tqdm
 from typing import List, Literal, Callable, Coroutine, Any
 
-from mbvat.utils import COMMON_RESOLUTIONS,MBVATItem,CircleObject,RectangleObject,Position,Resolution
-
+from mbvat.utils import COMMON_RESOLUTIONS,MBVATItem,CircleObject,RectangleObject,Position,Resolution,NoneObject,BasicObject,TriangleObject
 
 
 def build_full_localization_test(
@@ -24,7 +23,8 @@ def build_full_localization_test(
         windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
         max_repeat_times: int = 1,
         delta_size=0.2,
-        colorful=False
+        colorful=False,
+        shapes = [RectangleObject,CircleObject]
         ) -> dict[float, dict[tuple[int, int], list[MBVATItem]]]:
     dataset = {}
     total_size = 0
@@ -73,7 +73,7 @@ def build_full_localization_test(
             shifted_points[:, 1] = np.clip(shifted_points[:, 1], 0, height-1)
 
             def sample_objects():
-                objs_type = np.random.randint(2,size=len(shifted_points))
+                objs_type = np.random.choice(shapes, size=len(shifted_points))
                 objs_area = ws*(
                     1+np.random.uniform(
                         -delta_size,
@@ -96,7 +96,7 @@ def build_full_localization_test(
                 # print(len(objs_type),len(shifted_points),len(objs_area),len(color1),len(color2))
 
                 for otype,point,area,c1,c2 in zip(objs_type,shifted_points,objs_area,color1,color2):
-                    if otype == 0:
+                    if otype == RectangleObject:
                         # rectangle
                         # center point must be the `point`
                         max_width = min(point[0]*2,2*(width-point[0]),area/4)
@@ -116,7 +116,7 @@ def build_full_localization_test(
                         obj = RectangleObject(width=obj_width, height=obj_height, color=c1, bbox=[
                                             0, 0, obj_width, obj_height])
 
-                    if otype == 1:
+                    if otype == CircleObject:
                         # circle
                         max_radius = int(min(point[0],(width-point[0]),point[1],(height-point[1])))
 
@@ -126,7 +126,29 @@ def build_full_localization_test(
                         radius = min(int((area/math.pi)**0.5),max_radius)
                         obj = CircleObject(radius=radius, color=c1, bbox=[
                                0, 0, 2*radius, 2*radius])
-                
+
+                    if otype == NoneObject:
+                        obj = NoneObject(color=c1, bbox=[0, 0, 0, 0])
+                    
+                    if otype == TriangleObject:
+                        # triangle
+                        max_width = min(point[0]*2,2*(width-point[0]),area/4)
+                        min_width = max(4,math.sqrt(0.2*area))
+                        if min_width > max_width:
+                            # print(min_width,max_width)
+                            continue
+
+                        # Calculate width and height with a more balanced approach
+                        aspect_ratio = random.uniform(0.5, 2)
+                        obj_width = int(math.sqrt(area / aspect_ratio))
+                        obj_height = int(area / obj_width)
+                        
+                        # Ensure width and height are within bounds
+                        obj_width = max(int(min_width), min(int(max_width), obj_width))
+                        obj_height = int(area / obj_width)
+                        obj = TriangleObject(width=obj_width, height=obj_height, color=c1, bbox=[
+                                            0, 0, obj_width, obj_height])
+                    
                     # print(max(point[0]-obj.bbox[2]//2,0))
                     dataset[res][ws].append(MBVATItem(
                         res=Resolution(width=width,height=height),
@@ -263,7 +285,8 @@ class ColorTester:
             resolutions=resolutions,
             windows_ratio=windows_ratio,
             max_repeat_times=max_repeat_times,
-            colorful=True
+            colorful=True,
+            shapes=[NoneObject,RectangleObject,CircleObject,TriangleObject]
         )
         self.resolutions = resolutions
         self.windows_ratio = windows_ratio

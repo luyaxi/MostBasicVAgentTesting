@@ -44,9 +44,9 @@ async def qwen_color_completions(item:MBVATItem)->str:
         )
 
         response = response.choices[0].message.content
-        # extract the point
-        point = extract_shape(response)
-        return point
+        # extract the shape
+        shape = extract_shape(response)
+        return shape
 
 
 def main(
@@ -84,8 +84,8 @@ def main(
             else:
                 draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}.png"))
                 
-            for idx,t in enumerate(statics["results"]["test"]):
-                statics["results"]["test"][idx] = t.model_dump()
+            for i,t in enumerate(statics["results"]["test"]):
+                statics["results"]["test"][i] = t.model_dump()
             json.dump(statics,open(os.path.join(save_path,f"{idx}.json"),"w"))
             
     asyncio.run(run_test())

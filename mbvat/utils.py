@@ -76,6 +76,38 @@ class BasicObject(BaseModel):
         raise NotImplementedError
 
 
+
+class NoneObject(BasicObject):
+    shape: str = "NotFound"
+    def draw(self, img: Image.Image, pos: Position):
+        return img
+
+class TriangleObject(BasicObject):
+    shape: str = "Triangle"
+    width: int = Field(..., title='The width of the object.')
+    height: int = Field(..., title='The height of the object.')
+    
+    def draw(self, img: Image.Image, pos: Position):
+        draw = ImageDraw.Draw(img)
+        x1, y1 = pos.x+self.width//2, pos.y
+        x2, y2 = pos.x+self.width, pos.y+self.height
+        x3, y3 = pos.x, pos.y+self.height
+        draw.polygon([x1, y1, x2, y2, x3, y3], fill=self.color)
+        return img
+    
+    def validate_point(self, pos: Position):
+        # validate point in the drawn triangle
+        x1, y1 = pos.x+self.width//2, pos.y
+        x2, y2 = pos.x+self.width, pos.y+self.height
+        x3, y3 = pos.x, pos.y+self.height
+        # calculate the area of the triangle
+        area = abs((x1*(y2-y3)+x2*(y3-y1)+x3*(y1-y2))/2)
+        area1 = abs((pos.x*(y2-y3)+x2*(y3-pos.y)+x3*(pos.y-y2))/2)
+        area2 = abs((x1*(pos.y-y3)+pos.x*(y3-y1)+x3*(y1-pos.y))/2)
+        area3 = abs((x1*(y2-pos.y)+x2*(pos.y-y1)+pos.x*(y1-y2))/2)
+        return area == area1+area2+area3
+        
+        
 class RectangleObject(BasicObject):
     shape: str = "Rectangle"
     width: int = Field(..., title='The width of the object.')

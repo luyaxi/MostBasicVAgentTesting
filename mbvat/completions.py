@@ -14,7 +14,7 @@ def create_localization_messages(item:MBVATItem, type: Literal["qwenvl"] = "qwen
 
     match type:
         case "qwenvl":
-            prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>, where x and y range from 0 to 1000."
+            prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>, where x and y range from 0 to 1000.\nExample Responses:\n<point>123,456</point>"
             return [
                 {"role":"user",
                     "content":[
@@ -36,7 +36,7 @@ def create_color_messages(item:MBVATItem, type: Literal["qwenvl"] = "qwenvl"):
 
     match type:
         case "qwenvl":
-            prompt = f"Describe the shape of elements shown in the image in format of <shape>any_shapes_here</shape>. The validated shapes are: Rectangle, Circle."
+            prompt = f"Describe the shape of elements shown in the image in format of <shape>any_shapes_here</shape>. The validated shapes are: Rectangle, Circle, NotFound. If you does not find any shape, output <shape>NotFound</shape>\nExample Responses:\n<shape>Rectangle</shape>\n<shape>Circle</shape>"
             return [
                 {"role":"user",
                     "content":[
