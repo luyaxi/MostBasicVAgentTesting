@@ -1,18 +1,24 @@
 import asyncio
-import matplotlib.pyplot as plt
-from typing import List, Literal, Callable, Coroutine, Any
-from scipy.ndimage import gaussian_filter
 import numpy as np
 import math
 import json
 import os
 from tqdm import tqdm
+from typing import List, Literal, Callable, Coroutine, Any
 
-from .build_loc_testset import COMMON_RESOLUTIONS,VALID_RESOLUTIONS,build_full_localization_test,LocaliationTestItem,Position
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+from scipy.ndimage import zoom,gaussian_filter
+
+import colour
+from colour.plotting import colour_style,plot_chromaticity_diagram_CIE1976UCS
 from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000
-from scipy.ndimage import zoom
+
+from .build_loc_testset import COMMON_RESOLUTIONS,VALID_RESOLUTIONS,build_full_localization_test,LocaliationTestItem,Position
+
 
 def calculate_color_delta(color1,color2):
     c1 = sRGBColor(color1[0],color1[1],color1[2])
@@ -115,7 +121,7 @@ class LocalizationTester:
                         break
                     done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=15)
 
-                meta["Discernible"] = sum(labels)/len(labels) > 0.5
+                meta["Discernible"] = sum(labels)/(len(labels)+1e-6)> 0.5
                 statics.append({
                     "meta": meta,
                     "results": {
@@ -127,12 +133,18 @@ class LocalizationTester:
                 print(meta)
                 
                 if save_path is not None:    
-                    draw_res_correctness(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
+                    if self.colorful:
+                        draw_color_coverage(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
+                    else:
+                        draw_res_correctness(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
                     for idx,t in enumerate(statics[-1]["results"]["test"]):
                         statics[-1]["results"]["test"][idx] = t.model_dump()
                     json.dump(statics[-1],open(os.path.join(save_path,f"{subset_idx}.json"),"w"))
                 else:
-                    draw_res_correctness(statics[-1])
+                    if self.colorful:
+                        draw_color_coverage(statics[-1])
+                    else:
+                        draw_res_correctness(statics[-1])
         return statics
     
 
@@ -148,9 +160,12 @@ def draw_res_correctness(
     y = []
 
     for t,label in zip(statics["results"]["test"],statics["results"]["labels"]):
-        t:LocaliationTestItem
-        x.append(t.center.x)
-        y.append(t.center.y)
+        if isinstance(t,LocaliationTestItem):
+            x.append(t.center.x)
+            y.append(t.center.y)
+        elif isinstance(t,dict):
+            x.append(t["center"]["x"])
+            y.append(t["center"]["y"])
     
     x=  np.array(x)
     y = np.array(y)
@@ -219,3 +234,99 @@ def draw_res_correctness(
         plt.savefig(save_path)
     else:
         plt.show()
+        
+def draw_color_coverage(
+    statics,    
+    save_path:str = None,
+):
+    # 1  colour-science函数画出CIE1976UCS色域图
+    colour_style()
+    plot_chromaticity_diagram_CIE1976UCS(standalone=False)
+    ax = plt.gca()       # 获取CIE1976UCS的坐标系
+    
+    
+    # 2  将CIE1931 xy坐标转换成CIE1976 u'v'坐标
+    # 坐标转换函数
+    # colour.xy_to_Luv_uv        convert  CIE 1931 xy to CIE 1976UCS u'v'
+    # colour.xy_to_UCS_uv       convert CIE 1931 xy to CIE 1960UCS uv            
+    #  xy: CIE 1931 xy;    UCS_uv: CIE 1960UCS uv;  Luv_uv: CIE 1976 u'v'
+    
+    ITUR_709=([[.64, .33], [.3, .6], [.15, .06]])
+    ITUR_709_uv=colour.xy_to_Luv_uv(ITUR_709)
+    ITUR_2020=([[.708, .292], [.170, .797], [.131, .046]])
+    ITUR_2020_uv=colour.xy_to_Luv_uv(ITUR_2020)
+    DCI_P3=([[.68, .32], [.265, .69], [.15, .06]])
+    DCI_P3_uv=colour.xy_to_Luv_uv(DCI_P3)
+    pointer_bound= ([[ 0.508, 0.226], [ 0.538, 0.258], [ 0.588, 0.280], [ 0.637, 0.298], [ 0.659, 0.316], 
+                                        [ 0.634, 0.351], [ 0.594, 0.391], [ 0.557, 0.427], [ 0.523, 0.462], [ 0.482, 0.491], 
+                                        [ 0.444, 0.515], [ 0.409, 0.546], [ 0.371, 0.558], [ 0.332, 0.573], [ 0.288, 0.584], 
+                                        [ 0.242, 0.576], [ 0.202, 0.530 ], [ 0.177, 0.454], [ 0.151, 0.389],[ 0.151, 0.330 ],
+                                        [ 0.162, 0.295], [ 0.157, 0.266], [ 0.159, 0.245], [ 0.142, 0.214], [ 0.141, 0.195], 
+                                        [ 0.129, 0.168], [ 0.138, 0.141], [ 0.145, 0.129], [ 0.145, 0.106], [ 0.161, 0.094], 
+                                        [ 0.188, 0.084], [ 0.252, 0.104], [ 0.324, 0.127], [ 0.393, 0.165], [ 0.451, 0.199], [ 0.508, 0.226]])
+    pointer_bound_uv=colour.xy_to_Luv_uv(pointer_bound)
+    
+    
+    # 3 matplotlib绘制ITU-R BT.709，ITU-R BT.2020，DCI-P3色域空间多边形，以及pointer 色域空间
+    gamut_709=patches.Polygon(ITUR_709_uv, linewidth=2, color='green', fill=False)
+    gamut_2020=patches.Polygon(ITUR_2020_uv, linewidth=2, color='yellow', fill=False)
+    gamut_DCI_P3=patches.Polygon(DCI_P3_uv, linewidth=1, color='blue', fill=False)
+    gamut_pointer=patches.Polygon(pointer_bound_uv, linewidth=2, color='white', fill=False)
+    ax.add_patch(gamut_709)
+    ax.add_patch(gamut_2020)
+    ax.add_patch(gamut_DCI_P3)
+    ax.add_patch(gamut_pointer)
+
+    # 4 附加曲线标注，修改坐标范围
+    plt.legend([gamut_709,gamut_2020, gamut_DCI_P3, gamut_pointer],
+        ['ITU-R BT.709','ITU-R BT.2020', 'DCI-P3', 'pointer gamut'],
+        loc='upper right')  # 对曲线的标注
+
+    # 5 读取Static颜色数据
+    res_x,res_y = statics["meta"]["Resolution"]
+    ws_ratio:float = statics["meta"]["Windows Ratio"]
+    labels = np.array(statics["results"]["labels"])
+    foreground_colors = []
+    background_colors = []
+
+    for t in statics["results"]["test"]:
+        if isinstance(t,LocaliationTestItem):
+            foreground_colors.append(list(t.obj.color))
+            background_colors.append(list(t.background))
+        elif isinstance(t,dict):
+            foreground_colors.append(t["obj"]["color"])
+            background_colors.append(t["background"])
+    
+    background_colors = np.array(background_colors)
+    foreground_colors = np.array(foreground_colors)
+    
+    foreground_colors_corrected = np.clip(foreground_colors,0,255)
+    foreground_colors_normalized = foreground_colors_corrected/255
+    foreground_colors_linear = np.where(
+        foreground_colors_normalized <= 0.04045,
+        foreground_colors_normalized / 12.92,
+        ((foreground_colors_normalized + 0.055) / 1.055) ** 2.4
+    )
+    foreground_colors_XYZ = colour.sRGB_to_XYZ(foreground_colors_linear)
+    foreground_colors_xy = colour.XYZ_to_xy(foreground_colors_XYZ)
+    foreground_colors_uv = colour.xy_to_Luv_uv(foreground_colors_xy)
+    
+    # 6 在图上根据foreground_colors_uv添加灰色蒙版
+    ax.scatter(
+        foreground_colors_uv[:, 0],
+        foreground_colors_uv[:, 1],
+        color='grey',
+        alpha=0.3,
+        s=15,
+        label='Failed Foreground Colors',
+        edgecolors='none'
+    )
+    # plt.legend()
+    
+    # 7 显示
+    plt.axis([-0.1, 0.7, -0.1, 0.7])
+    if save_path is not None:
+        plt.savefig(save_path)
+    else:
+        plt.show()
+        

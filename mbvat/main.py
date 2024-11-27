@@ -59,22 +59,27 @@ async def random_pointer(item:LocaliationTestItem):
     return Position(x=x,y=y)
 
 def main(
-    test:Literal["localization"]="localization",
+    test:Literal["localization","colorful_localization"]="localization",
     random_test:bool = False,
-    save_path:str = "results"
+    save_path:str = "results",
+    max_repeat_times:int = 5,
 ):
+    
+    if random_test:
+        completion_func = random_pointer
+    else:
+        completion_func = completions
+    
     match test:
         case "localization":
-            tester = LocalizationTester(max_repeat_times=5)
-
-
-            if random_test:
-                results = asyncio.run(tester.run(random_pointer,save_path=save_path))
-            else:
-                results = asyncio.run(tester.run(completions,save_path=save_path))
+            tester = LocalizationTester(max_repeat_times=max_repeat_times)
+        
+        case "colorful_localization":
+            tester = LocalizationTester(max_repeat_times=max_repeat_times,colorful=True)    
         
         case _:
             raise ValueError(f"Unkown test {test}")
-    
+    asyncio.run(tester.run(completion_func,save_path=save_path))
+
 if __name__=="__main__":
     fire.Fire(main)
