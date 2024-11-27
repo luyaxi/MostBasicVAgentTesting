@@ -1,85 +1,94 @@
 import fire
-import io
 import asyncio
 from typing import Literal
-from openai import AsyncOpenAI
-import base64
 import json
-import re
-import random
-from .loc_test import LocalizationTester,LocaliationTestItem,Position,draw_res_correctness
-
+import os
+from mbvat.build_testset import LocalizationTester,MBVATItem,Position,ColorTester
+from mbvat.completions import create_localization_messages,extract_point,create_color_messages,extract_shape,random_pointer,random_shape
+from mbvat.visualization import draw_color_coverage,draw_res_correctness
 
 sem = asyncio.Semaphore(32)
-async def completions(item:LocaliationTestItem)->Position:
+async def qwen_localization_completions(item:MBVATItem)->Position:
     async with sem:
-        img= item.draw()
-        # convert to jpeg codec
-        img_io = io.BytesIO()
-        img.save(img_io, "JPEG")
-        img_io.seek(0)
-
-        prompt = f"Given the image, please give a point's coordinate in the {item.obj.shape} in form of <point>x,y</point>, where x and y range from 0 to 1000."
+        messages = create_localization_messages(item)
+        from openai import AsyncOpenAI
         client = AsyncOpenAI(
             api_key="sk-1234",
             base_url="http://localhost:8000/v1"
         )
         response = await client.chat.completions.create(
-            messages=[
-                {"role":"user",
-                    "content":[
-                    {"type":"text","text":prompt},
-                    {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+base64.b64encode(img_io.read()).decode()}},
-                ]}
-            ],
-            model="qwen2vl"
+            messages=messages,
+            model="qwen2vl",
+            # logprobs=True,
+            # top_logprobs=20,
         )
+
         response = response.choices[0].message.content
         # extract the point
-        try:
-            s = response.split("<point>")[-1].split("</point>")[0]
-            x = s.split(",")
-            if len(x) == 2:
-                x,y = x
-                return Position(x=int(int(x)/1000*item.res.width),y=int(int(y)/1000*item.res.height))
-            else:
-                raise ValueError(f"Unkown point format: {x}")
-        except:
+        point = extract_point(response,item.res.width,item.res.height)
+        return point
 
-            # print("No point found: ",response)
-            x = random.randint(0,item.res.width)
-            y = random.randint(0,item.res.height)
-            return Position(x=x,y=y)
+async def qwen_color_completions(item:MBVATItem)->str:
+    async with sem:
+        messages = create_color_messages(item)
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(
+            api_key="sk-1234",
+            base_url="http://localhost:8000/v1"
+        )
+        response = await client.chat.completions.create(
+            messages=messages,
+            model="qwen2vl",
+            # logprobs=True,
+            # top_logprobs=20,
+        )
 
+        response = response.choices[0].message.content
+        # extract the point
+        point = extract_shape(response,item.res.width,item.res.height)
+        return point
 
-async def random_pointer(item:LocaliationTestItem):
-    import random
-    x = random.randint(0,item.res.width)
-    y = random.randint(0,item.res.height)
-    return Position(x=x,y=y)
 
 def main(
-    test:Literal["localization","colorful_localization"]="localization",
+    test:Literal["localization","localization_colorful","color"]="localization",
     random_test:bool = False,
     save_path:str = "results",
     max_repeat_times:int = 5,
 ):
     
-    if random_test:
-        completion_func = random_pointer
-    else:
-        completion_func = completions
-    
     match test:
         case "localization":
             tester = LocalizationTester(max_repeat_times=max_repeat_times)
-        
-        case "colorful_localization":
-            tester = LocalizationTester(max_repeat_times=max_repeat_times,colorful=True)    
-        
+            completion_func = qwen_localization_completions if not random_test else random_pointer
+
+        case "localization_colorful":
+            tester = LocalizationTester(max_repeat_times=max_repeat_times,colorful=True)
+            completion_func = qwen_localization_completions if not random_test else random_pointer
+
+        case "color":
+            tester = ColorTester(max_repeat_times=max_repeat_times)
+            completion_func = qwen_color_completions if not random_test else random_shape
+
         case _:
             raise ValueError(f"Unkown test {test}")
-    asyncio.run(tester.run(completion_func,save_path=save_path))
+        
+
+        
+    async def run_test():
+        idx = 0
+        async for statics in tester.run(completion_func):
+            idx+=1
+            print(statics["meta"])
+            if "color" in test:
+                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}.png"))
+            else:
+                draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}.png"))
+                
+            for idx,t in enumerate(statics["results"]["test"]):
+                statics["results"]["test"][idx] = t.model_dump()
+            json.dump(statics,open(os.path.join(save_path,f"{idx}.json"),"w"))
+            
+    asyncio.run(run_test())
 
 if __name__=="__main__":
     fire.Fire(main)

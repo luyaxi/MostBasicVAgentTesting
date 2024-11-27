@@ -1,10 +1,5 @@
-import asyncio
 import numpy as np
 import math
-import json
-import os
-from tqdm import tqdm
-from typing import List, Literal, Callable, Coroutine, Any
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -17,7 +12,7 @@ from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000
 
-from .build_loc_testset import COMMON_RESOLUTIONS,VALID_RESOLUTIONS,build_full_localization_test,LocaliationTestItem,Position
+from mbvat.utils import MBVATItem,Position
 
 
 def calculate_color_delta(color1,color2):
@@ -27,126 +22,6 @@ def calculate_color_delta(color1,color2):
     c2_lab = convert_color(c2,LabColor)
     return delta_e_cie2000(c1_lab, c2_lab)
 
-class LocalizationTester:
-    def __init__(
-        self,
-        resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
-        windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
-        colorful:bool=False,
-        max_repeat_times: int = 1
-    ):
-        self.data = build_full_localization_test(
-            resolutions=resolutions,
-            windows_ratio=windows_ratio,
-            max_repeat_times=max_repeat_times,
-            colorful=colorful
-        )
-        self.resolutions = resolutions
-        self.windows_ratio = windows_ratio
-        self.colorful = colorful
-        self.max_repeat_times = max_repeat_times
-
-    def __len__(self):
-        total = 0
-        for res, res_testset in  self.data.items():
-            for ws,subset  in res_testset.items():
-                total+=len(subset)
-        return total
-    
-    def __getitem__(self, idx):
-        for res, res_testset in  self.data.items():
-            for ws,subset  in res_testset.items():
-                if idx < len(subset):
-                    return subset[idx]
-                else:
-                    idx -= len(subset)
-        raise IndexError
-
-    async def run(
-        self,
-        completion_func: Callable[[LocaliationTestItem], Coroutine[Any,Any,Position | list[int, int, int, int]]],
-        save_path:str = None
-    ):
-        statics = []
-        subset_idx = 0
-        for res, res_testset in  self.data.items():
-            for ws,subset  in res_testset.items():
-                subset_idx+=1
-                meta = {
-                    "Windows Ratio": ws,
-                    "Resolution": res,
-                    "Colorful": self.colorful
-                }
-                tasks = [asyncio.create_task(
-                    completion_func(
-                    item), name=str(idx)) for idx, item in enumerate(subset)]
-
-                test = []
-                labels = []
-                preds = []
-                pbar = tqdm(total=len(tasks), ncols=150)
-                timeout_counter = 0
-                timeout_limit = 3  # Set the limit for timeout occurrences
-
-                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED, timeout=15)
-                while pending or done:
-                    if not done:
-                        timeout_counter += 1
-                        if timeout_counter >= timeout_limit:
-                            print("Timeout limit reached, exiting loop.")
-                            break
-                    else:
-                        timeout_counter = 0  # Reset counter if tasks are done
-
-                    for item in done:
-                        try:
-                            ret = await item
-                        except Exception as e:
-                            print(f"Error: {e}")
-                            continue
-                        idx = int(item.get_name())
-                        pbar.update(1)
-                        if idx < len(subset):
-                            t = subset[idx]
-                            test.append(t)
-                            if isinstance(ret, Position):
-                                labels.append(t.validate_point(ret))
-                                preds.append([ret.x, ret.y])
-                            else:
-                                labels.append(t.validate_bbox(ret))
-                                preds.append(ret)
-                        else:
-                            print(f"Unknown index: {idx}")
-                    if not pending:
-                        break
-                    done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=15)
-
-                meta["Discernible"] = sum(labels)/(len(labels)+1e-6)> 0.5
-                statics.append({
-                    "meta": meta,
-                    "results": {
-                        "test":test,
-                        "labels": labels,
-                        "preds": preds
-                    }
-                })
-                print(meta)
-                
-                if save_path is not None:    
-                    if self.colorful:
-                        draw_color_coverage(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
-                    else:
-                        draw_res_correctness(statics[-1], save_path=os.path.join(save_path,f"{subset_idx}.png"))
-                    for idx,t in enumerate(statics[-1]["results"]["test"]):
-                        statics[-1]["results"]["test"][idx] = t.model_dump()
-                    json.dump(statics[-1],open(os.path.join(save_path,f"{subset_idx}.json"),"w"))
-                else:
-                    if self.colorful:
-                        draw_color_coverage(statics[-1])
-                    else:
-                        draw_res_correctness(statics[-1])
-        return statics
-    
 
 def draw_res_correctness(
     statics, 
@@ -160,7 +35,7 @@ def draw_res_correctness(
     y = []
 
     for t,label in zip(statics["results"]["test"],statics["results"]["labels"]):
-        if isinstance(t,LocaliationTestItem):
+        if isinstance(t,MBVATItem):
             x.append(t.center.x)
             y.append(t.center.y)
         elif isinstance(t,dict):
@@ -290,7 +165,7 @@ def draw_color_coverage(
     background_colors = []
 
     for t in statics["results"]["test"]:
-        if isinstance(t,LocaliationTestItem):
+        if isinstance(t,MBVATItem):
             foreground_colors.append(list(t.obj.color))
             background_colors.append(list(t.background))
         elif isinstance(t,dict):
