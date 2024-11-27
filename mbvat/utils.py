@@ -149,7 +149,8 @@ class MBVATItem(BaseModel):
     obj: BasicObject
     topleft_pos: Position
     background: str | tuple[int, int,
-                            int] = Field(..., title='The background color of the image.')
+                            int] = Field(..., description='The background color of the image.')
+    delta_e: float = Field(description="The color difference between the object and the background.")
 
     @property
     def center(self):
@@ -180,3 +181,22 @@ class MBVATItem(BaseModel):
         inter_area = max(0, x6-x5)*max(0, y6-y5)
         union_area = (x2-x1)*(y2-y1) + (x4-x3)*(y4-y3) - inter_area
         return inter_area/union_area >= threshold
+
+from colormath.color_objects import sRGBColor, LabColor
+from colormath.color_conversions import convert_color
+from colormath.color_diff import _get_lab_color1_vector, _get_lab_color2_matrix, color_diff_matrix
+
+
+
+def calculate_color_delta(color1,color2,Kl=1, Kc=1, Kh=1):
+    c1 = sRGBColor(color1[0],color1[1],color1[2])
+    c2 = sRGBColor(color2[0],color2[1],color2[2])
+    c1_lab = convert_color(c1,LabColor)
+    c2_lab = convert_color(c2,LabColor)
+
+    color1_vector = _get_lab_color1_vector(c1_lab)
+    color2_matrix = _get_lab_color2_matrix(c2_lab)
+    delta_e = color_diff_matrix.delta_e_cie2000(
+        color1_vector, color2_matrix, Kl=Kl, Kc=Kc, Kh=Kh)[0]
+    
+    return delta_e

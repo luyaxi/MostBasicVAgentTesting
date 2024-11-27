@@ -8,19 +8,9 @@ from scipy.ndimage import zoom,gaussian_filter
 
 import colour
 from colour.plotting import colour_style,plot_chromaticity_diagram_CIE1976UCS
-from colormath.color_objects import sRGBColor, LabColor
-from colormath.color_conversions import convert_color
-from colormath.color_diff import delta_e_cie2000
 
-from mbvat.utils import MBVATItem,Position
+from mbvat.utils import MBVATItem,Position,calculate_color_delta
 
-
-def calculate_color_delta(color1,color2):
-    c1 = sRGBColor(color1[0],color1[1],color1[2])
-    c2 = sRGBColor(color2[0],color2[1],color2[2])
-    c1_lab = convert_color(c1,LabColor)
-    c2_lab = convert_color(c2,LabColor)
-    return delta_e_cie2000(c1_lab, c2_lab)
 
 
 def draw_res_correctness(
@@ -31,6 +21,13 @@ def draw_res_correctness(
     ):
     res_x,res_y = statics["meta"]["Resolution"]
     ws_ratio:float = statics["meta"]["Windows Ratio"]
+
+    if res_x >= res_y:
+        plt.figure(figsize=(8+0.5,8*(res_y/res_x)))
+    else:
+        plt.figure(figsize=(8,8*(res_y/res_x)+0.5))
+    
+    
     x = []
     y = []
 
@@ -70,6 +67,26 @@ def draw_res_correctness(
             if label:
                 true_counts[xi, yi] += 1
 
+    # 获取每个单元内最小delta e并绘制在图上
+    for xj in range(max(x_inds)+1):
+        for yj in range(max(y_inds)+1):
+            x_center = (x_bins[xj] + x_bins[xj+1]) / 2
+            y_center = (y_bins[yj] + y_bins[yj+1]) / 2
+            
+            # obtain the minimum delta e in the window
+            window_colors = []
+            box_elems = np.logical_and(x_inds == xj, y_inds == yj)
+            for idx in np.where(box_elems)[0]:
+                item = statics["results"]["test"][idx]
+                window_colors.append(item.delta_e)
+            
+            if len(window_colors) == 0:
+                continue
+            min_delta_e = np.min(window_colors)
+            
+            plt.text(x_center, y_center, f'{min_delta_e:0.1f}', ha='center', va='center', fontsize=8, color='black')
+
+
     # 计算正确率：True 的比例
     accuracy = np.divide(
         true_counts, 
@@ -87,8 +104,6 @@ def draw_res_correctness(
     if sigma is not None:
         accuracy = gaussian_filter(accuracy, sigma=sigma)
 
-
-    plt.figure(figsize=(8,8*(res_y/res_x)+0.5))
     cmap = plt.get_cmap('RdYlGn')
     img = plt.imshow(
         accuracy.T,  # 转置以匹配 x 和 y 轴
@@ -103,7 +118,9 @@ def draw_res_correctness(
     plt.colorbar(img, orientation='vertical')
 
     plt.gca().set_aspect('equal', adjustable='box')  # 设置纵横比为1:1
-    plt.title(f'Windows Ratio: {ws_ratio}\nResolution: {res_x}x{res_y}\nCorrectness: {sum(labels)}/{len(labels)}')
+    plt.title(f'Windows Ratio: {ws_ratio} Resolution: {res_x}x{res_y} Correctness: {sum(labels)}/{len(labels)}')
+    # 去掉网格线
+    plt.grid(False)
 
     if save_path is not None:
         plt.savefig(save_path)
@@ -113,6 +130,8 @@ def draw_res_correctness(
 def draw_color_coverage(
     statics,    
     save_path:str = None,
+    plot_success:bool = False,
+    similarity_threshold:float = 10
 ):
     # 1  colour-science函数画出CIE1976UCS色域图
     colour_style()
@@ -186,48 +205,66 @@ def draw_color_coverage(
     foreground_colors_xy = colour.XYZ_to_xy(foreground_colors_XYZ)
     foreground_colors_uv = colour.xy_to_Luv_uv(foreground_colors_xy)
     
-    # 6. Add a global grey mask and remove it where labels are True
-    # Step 6a: Add a semi-transparent grey overlay covering the entire plot
-    # grey_mask = patches.Rectangle(
-    #     (-0.1, -0.1),  # (x,y) of the lower left corner
-    #     0.8,  # width
-    #     0.8,  # height
-    #     facecolor='grey',
-    #     alpha=0.7,
-    #     zorder=100  # Ensure it's on top of all other plots
-    # )
-    # ax.add_patch(grey_mask)
-    # Step 6b: Plot the 'True' labels on top to "remove" the grey mask in those areas
-    # Assuming 'labels' is a boolean array where True indicates coverage
-    passed_indices = labels  # Adjust based on your actual label structure
-    failed_indices = ~labels
 
-    # Plot failed foreground colors with grey color and some transparency
-    ax.scatter(
-        foreground_colors_uv[failed_indices, 0],
-        foreground_colors_uv[failed_indices, 1],
-        color='grey',
-        alpha=0.3,
-        s=30,
-        label='Failed Foreground Colors',
-        edgecolors='black',
-        # zorder=2  # Ensure it's above the grey mask
-    )
+    if plot_success:
+        passed_indices = labels  # Adjust based on your actual label structure
+        # Step 6b: Add a semi-transparent grey overlay covering the entire plot
+        grey_mask = patches.Rectangle(
+            (-0.1, -0.1),  # (x,y) of the lower left corner
+            0.8,  # width
+            0.8,  # height
+            facecolor='grey',
+            alpha=0.7,
+            zorder=100  # Ensure it's on top of all other plots
+        )
+        ax.add_patch(grey_mask)
+
+        
+        # Plot passed foreground colors with distinct color to highlight them
+        ax.scatter(
+            foreground_colors_uv[passed_indices, 0],
+            foreground_colors_uv[passed_indices, 1],
+            c=foreground_colors_normalized[passed_indices],  # Use CIE colors for coloring
+            edgecolors=foreground_colors_normalized[passed_indices],
+            s=15,
+            alpha=1,
+            label='Passed Foreground Colors',
+            zorder=1000  # Ensure it's above everything
+        )
     
-    # Plot passed foreground colors with distinct color to highlight them
-    # ax.scatter(
-    #     foreground_colors_uv[passed_indices, 0],
-    #     foreground_colors_uv[passed_indices, 1],
-    #     c=foreground_colors_normalized[passed_indices],  # Use CIE colors for coloring
-    #     edgecolors=foreground_colors_normalized[passed_indices],
-    #     s=15,
-    #     alpha=1,
-    #     label='Passed Foreground Colors',
-    #     zorder=1000  # Ensure it's above everything
-    # )
-    
+    else:
+        # only be considered as failed if all similiar color are failed
+        failed_indices = np.logical_not(labels)
+        
+        # color_similarities = np.zeros((len(foreground_colors),len(foreground_colors)))
+        # for i in range(len(foreground_colors_normalized)):
+        #     for j in range(i+1,len(foreground_colors_normalized)):
+        #         color_similarities[i][j] = calculate_color_delta(foreground_colors_normalized[i],foreground_colors_normalized[j])
+        #         color_similarities[j][i] = color_similarities[i][j]
+        
+        # for i in range(len(failed_indices)):
+        #     if failed_indices[i]:
+        #         # check all similar color
+        #         for j in np.where(color_similarities[i] < similarity_threshold)[0]:
+        #             if labels[j]:
+        #                 failed_indices[i] = False
+        #                 break
+        
+        
+        # Plot failed foreground colors with grey color and some transparency
+        ax.scatter(
+            foreground_colors_uv[failed_indices, 0],
+            foreground_colors_uv[failed_indices, 1],
+            color='grey',
+            alpha=0.3,
+            s=30,
+            label='Failed Foreground Colors',
+            edgecolors='black',
+            # zorder=2  # Ensure it's above the grey mask
+        )
+
     # 7 显示
-    plt.title(f'Windows Ratio: {ws_ratio}\nResolution: {res_x}x{res_y}\nCoverage: {sum(labels)}/{len(labels)}')
+    plt.title(f'Windows Ratio: {ws_ratio} Resolution: {res_x}x{res_y} Coverage: {sum(labels)}/{len(labels)}')
     plt.axis([-0.1, 0.7, -0.1, 0.7])
     if save_path is not None:
         plt.savefig(save_path)

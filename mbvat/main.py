@@ -79,11 +79,11 @@ def main(
         async for statics in tester.run(completion_func):
             idx+=1
             print(statics["meta"])
-            if "color" in test:
-                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}.png"))
-            else:
-                draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}.png"))
-                
+            draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}_loc.png"))
+            if tester.colorful:
+                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color_failed.png"),plot_success=False)
+                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color_pass.png"),plot_success=True)
+
             for i,t in enumerate(statics["results"]["test"]):
                 statics["results"]["test"][i] = t.model_dump()
             json.dump(statics,open(os.path.join(save_path,f"{idx}.json"),"w"))

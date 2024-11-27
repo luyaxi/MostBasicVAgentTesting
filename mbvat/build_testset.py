@@ -16,6 +16,7 @@ from tqdm import tqdm
 from typing import List, Literal, Callable, Coroutine, Any
 
 from mbvat.utils import COMMON_RESOLUTIONS,MBVATItem,CircleObject,RectangleObject,Position,Resolution,NoneObject,BasicObject,TriangleObject
+from mbvat.utils import calculate_color_delta
 
 
 def build_full_localization_test(
@@ -96,6 +97,7 @@ def build_full_localization_test(
                 # print(len(objs_type),len(shifted_points),len(objs_area),len(color1),len(color2))
 
                 for otype,point,area,c1,c2 in zip(objs_type,shifted_points,objs_area,color1,color2):
+
                     if otype == RectangleObject:
                         # rectangle
                         # center point must be the `point`
@@ -128,7 +130,7 @@ def build_full_localization_test(
                                0, 0, 2*radius, 2*radius])
 
                     if otype == NoneObject:
-                        obj = NoneObject(color=c1, bbox=[0, 0, 0, 0])
+                        obj = NoneObject(color=c2, bbox=[0, 0, 0, 0])
                     
                     if otype == TriangleObject:
                         # triangle
@@ -148,6 +150,9 @@ def build_full_localization_test(
                         obj_height = int(area / obj_width)
                         obj = TriangleObject(width=obj_width, height=obj_height, color=c1, bbox=[
                                             0, 0, obj_width, obj_height])
+                    delta_e = calculate_color_delta(c1/255,c2/255)
+                    if delta_e < 3 and otype != NoneObject:
+                        continue # Too similar colors that are hard to distinguish
                     
                     # print(max(point[0]-obj.bbox[2]//2,0))
                     dataset[res][ws].append(MBVATItem(
@@ -157,7 +162,8 @@ def build_full_localization_test(
                             x=int(max(point[0]-obj.bbox[2]//2,0)),
                             y=int(max(point[1]-obj.bbox[3]//2,0))
                         ),
-                        background=c2
+                        background=c2,
+                        delta_e=delta_e
                     ))
 
             sample_objects()
@@ -291,6 +297,7 @@ class ColorTester:
         self.resolutions = resolutions
         self.windows_ratio = windows_ratio
         self.max_repeat_times = max_repeat_times
+        self.colorful = True
 
     def __len__(self):
         total = 0
