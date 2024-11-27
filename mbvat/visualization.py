@@ -23,9 +23,9 @@ def draw_res_correctness(
     ws_ratio:float = statics["meta"]["Windows Ratio"]
 
     if res_x >= res_y:
-        plt.figure(figsize=(8+0.5,8*(res_y/res_x)))
+        plt.figure(figsize=(10,8*(res_y/res_x)))
     else:
-        plt.figure(figsize=(8,8*(res_y/res_x)+0.5))
+        plt.figure(figsize=(10,8*(res_y/res_x)))
     
     
     x = []
