@@ -311,17 +311,44 @@ def draw_color_coverage(
     foreground_colors_xy = colour.XYZ_to_xy(foreground_colors_XYZ)
     foreground_colors_uv = colour.xy_to_Luv_uv(foreground_colors_xy)
     
-    # 6 在图上根据foreground_colors_uv添加灰色蒙版
+    # 6. Add a global grey mask and remove it where labels are True
+    # Step 6a: Add a semi-transparent grey overlay covering the entire plot
+    # grey_mask = patches.Rectangle(
+    #     (-0.1, -0.1),  # (x,y) of the lower left corner
+    #     0.8,  # width
+    #     0.8,  # height
+    #     facecolor='grey',
+    #     alpha=0.7,
+    #     zorder=100  # Ensure it's on top of all other plots
+    # )
+    # ax.add_patch(grey_mask)
+    # Step 6b: Plot the 'True' labels on top to "remove" the grey mask in those areas
+    # Assuming 'labels' is a boolean array where True indicates coverage
+    passed_indices = labels  # Adjust based on your actual label structure
+    failed_indices = ~labels
+
+    # Plot failed foreground colors with grey color and some transparency
     ax.scatter(
-        foreground_colors_uv[:, 0],
-        foreground_colors_uv[:, 1],
+        foreground_colors_uv[failed_indices, 0],
+        foreground_colors_uv[failed_indices, 1],
         color='grey',
         alpha=0.3,
-        s=15,
+        s=30,
         label='Failed Foreground Colors',
-        edgecolors='none'
+        edgecolors='none',
+        # zorder=2  # Ensure it's above the grey mask
     )
-    # plt.legend()
+
+    # Optionally, plot passed foreground colors with distinct color to highlight them
+    # ax.scatter(
+    #     foreground_colors_uv[passed_indices, 0],
+    #     foreground_colors_uv[passed_indices, 1],
+    #     color='none',  # No fill
+    #     edgecolors='black',
+    #     s=15,
+    #     label='Passed Foreground Colors',
+    #     zorder=1004  # Ensure it's above everything
+    # )
     
     # 7 显示
     plt.axis([-0.1, 0.7, -0.1, 0.7])
