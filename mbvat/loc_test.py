@@ -313,44 +313,46 @@ def draw_color_coverage(
     
     # 6. Add a global grey mask and remove it where labels are True
     # Step 6a: Add a semi-transparent grey overlay covering the entire plot
-    # grey_mask = patches.Rectangle(
-    #     (-0.1, -0.1),  # (x,y) of the lower left corner
-    #     0.8,  # width
-    #     0.8,  # height
-    #     facecolor='grey',
-    #     alpha=0.7,
-    #     zorder=100  # Ensure it's on top of all other plots
-    # )
-    # ax.add_patch(grey_mask)
+    grey_mask = patches.Rectangle(
+        (-0.1, -0.1),  # (x,y) of the lower left corner
+        0.8,  # width
+        0.8,  # height
+        facecolor='grey',
+        alpha=0.7,
+        zorder=100  # Ensure it's on top of all other plots
+    )
+    ax.add_patch(grey_mask)
     # Step 6b: Plot the 'True' labels on top to "remove" the grey mask in those areas
     # Assuming 'labels' is a boolean array where True indicates coverage
     passed_indices = labels  # Adjust based on your actual label structure
     failed_indices = ~labels
 
     # Plot failed foreground colors with grey color and some transparency
-    ax.scatter(
-        foreground_colors_uv[failed_indices, 0],
-        foreground_colors_uv[failed_indices, 1],
-        color='grey',
-        alpha=0.3,
-        s=30,
-        label='Failed Foreground Colors',
-        edgecolors='none',
-        # zorder=2  # Ensure it's above the grey mask
-    )
-
-    # Optionally, plot passed foreground colors with distinct color to highlight them
     # ax.scatter(
-    #     foreground_colors_uv[passed_indices, 0],
-    #     foreground_colors_uv[passed_indices, 1],
-    #     color='none',  # No fill
-    #     edgecolors='black',
-    #     s=15,
-    #     label='Passed Foreground Colors',
-    #     zorder=1004  # Ensure it's above everything
+    #     foreground_colors_uv[failed_indices, 0],
+    #     foreground_colors_uv[failed_indices, 1],
+    #     color='grey',
+    #     alpha=0.3,
+    #     s=30,
+    #     label='Failed Foreground Colors',
+    #     edgecolors='none',
+    #     # zorder=2  # Ensure it's above the grey mask
     # )
     
+    # Plot passed foreground colors with distinct color to highlight them
+    ax.scatter(
+        foreground_colors_uv[passed_indices, 0],
+        foreground_colors_uv[passed_indices, 1],
+        c=foreground_colors_normalized[passed_indices],  # Use CIE colors for coloring
+        edgecolors=foreground_colors_normalized[passed_indices],
+        s=15,
+        alpha=1,
+        label='Passed Foreground Colors',
+        zorder=1000  # Ensure it's above everything
+    )
+    
     # 7 显示
+    plt.title(f'Windows Ratio: {ws_ratio}\nResolution: {res_x}x{res_y}\nCoverage: {sum(labels)}/{len(labels)}')
     plt.axis([-0.1, 0.7, -0.1, 0.7])
     if save_path is not None:
         plt.savefig(save_path)
