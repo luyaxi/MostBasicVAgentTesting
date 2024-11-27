@@ -45,7 +45,7 @@ async def qwen_color_completions(item:MBVATItem)->str:
 
         response = response.choices[0].message.content
         # extract the point
-        point = extract_shape(response,item.res.width,item.res.height)
+        point = extract_shape(response)
         return point
 
 
