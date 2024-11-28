@@ -62,6 +62,7 @@ def main(
     api_key: str = "sk-1234",
     model:str = "qwen2vl"
 ):
+    global BASE_URL,API_KEY,MODEL_NAME
     if base_url is not None:
         BASE_URL = base_url
     if api_key is not None:
@@ -96,8 +97,7 @@ def main(
             print(statics["meta"])
             draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}_loc.png"))
             if tester.colorful:
-                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color_failed.png"),plot_success=False)
-                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color_pass.png"),plot_success=True)
+                draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color.png"))
 
             for i,t in enumerate(statics["results"]["test"]):
                 statics["results"]["test"][i] = t.model_dump()

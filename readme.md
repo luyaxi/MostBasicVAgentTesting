@@ -41,14 +41,11 @@ The number in each grid shows the minimum Delta E (CIE 2000) between the foregro
 
 ### Color Test Results
 Here is a sample results you will find in your color test results:
-![Color Test Failed](./assets/color_failed.png)
+![Color Test Results](./assets/color_example.png)
 This picture shows the failed color test results.
-Each gray circle in the CIE 1976 color space shows the certain color tested can not be recognized by the model.
-
-![Color Test Success](./assets/color_pass.png)
-This picture shows the passed color test results.
-Each colored circle in the CIE 1976 color space shows the certain color tested can be recognized by the model.
-
+The big "Triangle" shows the CIE 1976 color space.
+We make a gray mask on top of color space.
+The brighter the color, the better the model can recognize it.
 
 
 ## Citation

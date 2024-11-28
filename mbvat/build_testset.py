@@ -83,8 +83,28 @@ def build_full_localization_test(
                         len(shifted_points))
                         )*width*height
                 if colorful:
+                    # num_colors = len(shifted_points)*2
+                    # srgb_uv = np.array(
+                    #     [[ 0.45070423,  0.52288732],
+                    #     [ 0.125     ,  0.5625    ],
+                    #     [ 0.1754386 ,  0.15789474]]
+                    # )
+                    # r1 = np.random.random(num_colors)
+                    # r2 = np.random.random(num_colors)
+                    # sqrt_r1 = np.sqrt(r1)
+                    # u = 1 - sqrt_r1
+                    # v = r2 * sqrt_r1
+                    # uv_points = u[:,np.newaxis]*srgb_uv[0] + v[:,np.newaxis]*srgb_uv[1] + (1-u-v)[:,np.newaxis]*srgb_uv[2]
+                    
+                    # rgb_points = colour.XYZ_to_sRGB(colour.xy_to_XYZ(colour.Luv_uv_to_xy(uv_points)))
+                    
+                    
+                    # colors1,colors2 = np.split(rgb_points,2)
+                    # color1 = (colors1*255).astype(int)
+                    # color2 = (colors2*255).astype(int)
                     color1 = np.random.randint(0,255,(len(shifted_points),3))
                     color2 = np.random.randint(0,255,(len(shifted_points),3))
+                    
                 else:
                     color1 = []
                     color2 = []
@@ -185,14 +205,17 @@ class LocalizationTester:
         resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
         windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
         colorful:bool=False,
+        shapes = [RectangleObject,CircleObject],
         max_repeat_times: int = 1
     ):
         self.data = build_full_localization_test(
             resolutions=resolutions,
             windows_ratio=windows_ratio,
             max_repeat_times=max_repeat_times,
-            colorful=colorful
+            colorful=colorful,
+            shapes=shapes
         )
+        self.shapes = shapes
         self.resolutions = resolutions
         self.windows_ratio = windows_ratio
         self.colorful = colorful
@@ -224,7 +247,8 @@ class LocalizationTester:
                 meta = {
                     "Windows Ratio": ws,
                     "Resolution": res,
-                    "Colorful": self.colorful
+                    "Colorful": self.colorful,
+                    "Tested Shapes": [str(shape) for shape in self.shapes]
                 }
                 error_counts = {}
                 tasks = [asyncio.create_task(
@@ -290,6 +314,7 @@ class ColorTester:
         self,
         resolutions: list[tuple[int, int]] = COMMON_RESOLUTIONS,
         windows_ratio: list[float] = [0.1, 0.05, 0.01, 0.005],
+        shapes=[NoneObject,RectangleObject,CircleObject,TriangleObject],
         max_repeat_times: int = 1
     ):
         self.data = build_full_localization_test(
@@ -297,8 +322,9 @@ class ColorTester:
             windows_ratio=windows_ratio,
             max_repeat_times=max_repeat_times,
             colorful=True,
-            shapes=[NoneObject,RectangleObject,CircleObject,TriangleObject]
+            shapes=shapes,
         )
+        self.shapes = shapes
         self.resolutions = resolutions
         self.windows_ratio = windows_ratio
         self.max_repeat_times = max_repeat_times
@@ -330,7 +356,8 @@ class ColorTester:
                 meta = {
                     "Windows Ratio": ws,
                     "Resolution": res,
-                    "Colorful": True
+                    "Colorful": True,
+                    "Tested Shapes": [str(shape) for shape in self.shapes]
                 }
                 error_counts = {}
                 tasks = [asyncio.create_task(
