@@ -9,7 +9,7 @@ from scipy.ndimage import zoom,gaussian_filter
 import colour
 from colour.plotting import colour_style,plot_chromaticity_diagram_CIE1976UCS
 
-from mbvat.utils import MBVATItem,Position,calculate_color_delta
+from mbvat.utils import MBVATItem,Position,cross_delta_e_cie2000
 
 
 
@@ -204,10 +204,10 @@ def draw_color_coverage(
     foreground_colors_XYZ = colour.sRGB_to_XYZ(foreground_colors_linear)
     foreground_colors_xy = colour.XYZ_to_xy(foreground_colors_XYZ)
     foreground_colors_uv = colour.xy_to_Luv_uv(foreground_colors_xy)
+    foreground_colors_lab = colour.XYZ_to_Lab(foreground_colors_XYZ)
+    color_similarity_matrix = cross_delta_e_cie2000(foreground_colors_lab,foreground_colors_lab)    
     
-
     if plot_success:
-        passed_indices = labels  # Adjust based on your actual label structure
         # Step 6b: Add a semi-transparent grey overlay covering the entire plot
         grey_mask = patches.Rectangle(
             (-0.1, -0.1),  # (x,y) of the lower left corner
@@ -219,14 +219,45 @@ def draw_color_coverage(
         )
         ax.add_patch(grey_mask)
 
+        passed_colors_uv = foreground_colors_uv[labels]
+        passed_colors_similarities = color_similarity_matrix[labels][:, labels]
         
+        # now try to merge adjacent colors to reduce the number of points
+        similar_counts = np.mean(passed_colors_similarities < similarity_threshold, axis=-1)
+        
+        merged_colors = []
+        merged_colors_size = []
+        while True:
+            # merge the most similar color
+            if np.max(similar_counts) < 2:
+                break
+            max_idx = np.argmax(similar_counts)
+            similar_counts[max_idx] = -1
+            similar_indices = np.where(passed_colors_similarities[max_idx] < similarity_threshold)[0]
+            merged_colors.append(np.mean(passed_colors_uv[similar_indices],axis=-1))
+            
+            merged_colors_size.append(len(similar_indices))
+        
+        for idx in np.where(similar_counts >= 0)[0]:
+            merged_colors.append(passed_colors_uv[idx])
+            merged_colors_size.append(1)
+        
+        merged_colors = np.array(merged_colors)
+        merged_colors_size = np.array(merged_colors_size)
+        
+        # obtain color according to Luv
+        XYZ = colour.Luv_to_XYZ(np.concatenate([50*np.ones((len(merged_colors),1)),merged_colors],axis=-1))
+        RGB = colour.XYZ_to_sRGB(XYZ / 100)
+        # 确保 RGB 值在 [0, 1] 范围内
+        RGB = np.clip(RGB, 0, 1)
+
         # Plot passed foreground colors with distinct color to highlight them
         ax.scatter(
-            foreground_colors_uv[passed_indices, 0],
-            foreground_colors_uv[passed_indices, 1],
-            c=foreground_colors_normalized[passed_indices],  # Use CIE colors for coloring
-            edgecolors=foreground_colors_normalized[passed_indices],
-            s=15,
+            merged_colors[:,0],
+            merged_colors[:,1],
+            c=RGB,  # Use CIE colors for coloring
+            edgecolors="none",
+            s=merged_colors_size,
             alpha=1,
             label='Passed Foreground Colors',
             zorder=1000  # Ensure it's above everything
@@ -235,21 +266,6 @@ def draw_color_coverage(
     else:
         # only be considered as failed if all similiar color are failed
         failed_indices = np.logical_not(labels)
-        
-        # color_similarities = np.zeros((len(foreground_colors),len(foreground_colors)))
-        # for i in range(len(foreground_colors_normalized)):
-        #     for j in range(i+1,len(foreground_colors_normalized)):
-        #         color_similarities[i][j] = calculate_color_delta(foreground_colors_normalized[i],foreground_colors_normalized[j])
-        #         color_similarities[j][i] = color_similarities[i][j]
-        
-        # for i in range(len(failed_indices)):
-        #     if failed_indices[i]:
-        #         # check all similar color
-        #         for j in np.where(color_similarities[i] < similarity_threshold)[0]:
-        #             if labels[j]:
-        #                 failed_indices[i] = False
-        #                 break
-        
         
         # Plot failed foreground colors with grey color and some transparency
         ax.scatter(

@@ -1,3 +1,6 @@
+import numpy as np
+from pydantic import BaseModel, Field
+from PIL import Image, ImageDraw
 
 VALID_RESOLUTIONS = [
     # regular desktop resolution
@@ -48,9 +51,6 @@ COMMON_RESOLUTIONS = [
 ]
 
 
-
-from pydantic import BaseModel, Field
-from PIL import Image, ImageDraw
 
 class Resolution(BaseModel):
     width: int
@@ -182,21 +182,137 @@ class MBVATItem(BaseModel):
         union_area = (x2-x1)*(y2-y1) + (x4-x3)*(y4-y3) - inter_area
         return inter_area/union_area >= threshold
 
-from colormath.color_objects import sRGBColor, LabColor
-from colormath.color_conversions import convert_color
-from colormath.color_diff import _get_lab_color1_vector, _get_lab_color2_matrix, color_diff_matrix
-
-
-
-def calculate_color_delta(color1,color2,Kl=1, Kc=1, Kh=1):
-    c1 = sRGBColor(color1[0],color1[1],color1[2])
-    c2 = sRGBColor(color2[0],color2[1],color2[2])
-    c1_lab = convert_color(c1,LabColor)
-    c2_lab = convert_color(c2,LabColor)
-
-    color1_vector = _get_lab_color1_vector(c1_lab)
-    color2_matrix = _get_lab_color2_matrix(c2_lab)
-    delta_e = color_diff_matrix.delta_e_cie2000(
-        color1_vector, color2_matrix, Kl=Kl, Kc=Kc, Kh=Kh)[0]
+def delta_e_cie2000(labc1, labc2, Kl=1, Kc=1, Kh=1):
+    """Calculates the Delta E (CIE2000) of the colors.
     
-    return delta_e
+    Args:
+        labc1: The L*a*b* vectors. Shape: (N,3).
+        labc2: The L*a*b* vectors. Shape: (N,3).
+    
+    Returns:
+        The Delta E (CIE2000). Shape: (N,).
+    """
+    
+    labc1 = np.array(labc1,dtype=np.float64)
+    labc2 = np.array(labc2,dtype=np.float64)
+
+
+    avg_Lp = (labc1[:,0] + labc2[:,0]) / 2.0 # N
+    
+    C1 = np.sqrt(np.sum(np.power(labc1[:, 1:], 2), axis=-1)) # N
+    C2 = np.sqrt(np.sum(np.power(labc2[:, 1:], 2), axis=-1)) # N
+    
+    avg_C1_C2 = (C1 + C2) / 2.0 # N
+    
+    G = 0.5 * (1 - np.sqrt(np.power(avg_C1_C2, 7.0) / (np.power(avg_C1_C2, 7.0) + np.power(25.0, 7.0)))) # N
+    a1p = (1.0 + G) * labc1[:, 1] # N
+    a2p = (1.0 + G) * labc2[:, 1] # N
+    
+    C1p = np.sqrt(np.power(a1p, 2) + np.power(labc1[:,2], 2)) # N
+    C2p = np.sqrt(np.power(a2p, 2) + np.power(labc2[:,2], 2)) # N
+    avg_C1p_C2p = (C1p + C2p) / 2.0 # N
+    
+    h1p = np.degrees(np.arctan2(labc1[:,2], a1p)) # N
+    h1p += (h1p < 0) * 360
+
+    h2p = np.degrees(np.arctan2(labc2[:,2], a2p)) # N
+    h2p += (h2p < 0) * 360
+
+    diff_h2p_h1p = h2p - h1p
+    delta_hp = diff_h2p_h1p + (np.fabs(diff_h2p_h1p) > 180) * 360
+    delta_hp -= (h2p > h1p) * 720
+    
+    avg_Hp = (((np.fabs(h1p - h2p) > 180) * 360) + h1p + h2p) / 2.0
+    
+    T = 1 - 0.17 * np.cos(np.radians(avg_Hp - 30)) + \
+        0.24 * np.cos(np.radians(2 * avg_Hp)) + \
+        0.32 * np.cos(np.radians(3 * avg_Hp + 6)) - \
+        0.2 * np.cos(np.radians(4 * avg_Hp - 63)) # N
+                
+    delta_Lp = labc1[:,0] - labc2[:,0] # N
+    delta_Cp = C2p - C1p # N
+    delta_Hp = 2 * np.sqrt(C1p * C2p) * np.sin(np.radians(delta_hp) / 2.0)
+
+    S_L = 1 + ((0.015 * np.power(avg_Lp - 50, 2)) / np.sqrt(20 + np.power(avg_Lp - 50, 2.0)))
+    S_C = 1 + 0.045 * avg_C1p_C2p
+    S_H = 1 + 0.015 * avg_C1p_C2p * T
+
+    delta_ro = 60 * np.exp(-(np.power(((avg_Hp - 275) / 25), 2.0)))
+    R_C = np.sqrt(np.power(avg_C1p_C2p, 7.0) / (np.power(avg_C1p_C2p, 7.0) + np.power(25.0, 7.0)))
+    R_T = -2 * R_C * np.sin(np.radians(delta_ro))
+    
+    return np.sqrt(
+        np.power(delta_Lp / (S_L * Kl), 2) +
+        np.power(delta_Cp / (S_C * Kc), 2) +
+        np.power(delta_Hp / (S_H * Kh), 2) +
+        R_T * (delta_Cp / (S_C * Kc)) * (delta_Hp / (S_H * Kh))
+    )
+
+    
+
+def cross_delta_e_cie2000(labc1,labc2, Kl=1, Kc=1, Kh=1):
+    """
+    Calculates the Delta E (CIE2000) matrix of the colors.
+    
+    Args:
+        labc1: The L*a*b* vectors. Shape: (N,3).
+        labc2: The L*a*b* vectors. Shape: (N,3).
+    
+    Returns:
+        The Delta E (CIE2000) matrix. Shape: (N, N).
+    """
+    
+    labc1 = np.array(labc1,dtype=np.float64)
+    labc2 = np.array(labc2,dtype=np.float64)
+
+    
+    avg_Lp = (labc1[:,0].reshape(1,-1) + labc2[:,0].reshape(-1,1)) / 2.0 # N,N
+    
+    C1 = np.sqrt(np.sum(np.power(labc1[:, 1:], 2), axis=-1,keepdims=True)) # N,1
+    C2 = np.sqrt(np.sum(np.power(labc2[:, 1:], 2), axis=-1,keepdims=True)) # N,1
+    
+    avg_C1_C2 = (C1.reshape(1,-1) + C2) / 2.0 # N,N
+    
+    G = 0.5 * (1 - np.sqrt(np.power(avg_C1_C2, 7.0) / (np.power(avg_C1_C2, 7.0) + np.power(25.0, 7.0)))) # N,N
+    a1p = (1.0 + G) * labc1[:, 1].reshape(-1,1) # N,N
+    a2p = (1.0 + G) * labc2[:, 1].reshape(1,-1) # N,N
+    
+    C1p = np.sqrt(np.power(a1p, 2) + np.power(labc1[:,2].reshape(-1,1), 2))
+    C2p = np.sqrt(np.power(a2p, 2) + np.power(labc2[:,2].reshape(1,-1), 2))
+    avg_C1p_C2p = (C1p + C2p) / 2.0
+    
+    h1p = np.degrees(np.arctan2(labc1[:,2].reshape(-1,1), a1p)) # N,N
+    h1p += (h1p < 0) * 360
+
+    h2p = np.degrees(np.arctan2(labc2[:,2].reshape(1,-1), a2p)) # N,N
+    h2p += (h2p < 0) * 360
+
+    diff_h2p_h1p = h2p - h1p
+    delta_hp = diff_h2p_h1p + (np.fabs(diff_h2p_h1p) > 180) * 360
+    delta_hp -= (h2p > h1p) * 720
+    
+    avg_Hp = (((np.fabs(h1p - h2p) > 180) * 360) + h1p + h2p) / 2.0
+    
+    T = 1 - 0.17 * np.cos(np.radians(avg_Hp - 30)) + \
+        0.24 * np.cos(np.radians(2 * avg_Hp)) + \
+        0.32 * np.cos(np.radians(3 * avg_Hp + 6)) - \
+        0.2 * np.cos(np.radians(4 * avg_Hp - 63)) # N,N
+                
+    delta_Lp = labc1[:,0].reshape(1,-1) - labc2[:,0].reshape(-1,1) # N,N
+    delta_Cp = C2p - C1p # N,N
+    delta_Hp = 2 * np.sqrt(C1p * C2p) * np.sin(np.radians(delta_hp) / 2.0)
+
+    S_L = 1 + ((0.015 * np.power(avg_Lp - 50, 2)) / np.sqrt(20 + np.power(avg_Lp - 50, 2.0)))
+    S_C = 1 + 0.045 * avg_C1p_C2p
+    S_H = 1 + 0.015 * avg_C1p_C2p * T
+
+    delta_ro = 60 * np.exp(-(np.power(((avg_Hp - 275) / 25), 2.0)))
+    R_C = np.sqrt(np.power(avg_C1p_C2p, 7.0) / (np.power(avg_C1p_C2p, 7.0) + np.power(25.0, 7.0)))
+    R_T = -2 * R_C * np.sin(np.radians(delta_ro))
+    
+    return np.sqrt(
+        np.power(delta_Lp / (S_L * Kl), 2) +
+        np.power(delta_Cp / (S_C * Kc), 2) +
+        np.power(delta_Hp / (S_H * Kh), 2) +
+        R_T * (delta_Cp / (S_C * Kc)) * (delta_Hp / (S_H * Kh))
+    )

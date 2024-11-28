@@ -12,11 +12,12 @@ import random
 import math
 import numpy as np
 import asyncio
+import colour
 from tqdm import tqdm
 from typing import List, Literal, Callable, Coroutine, Any
 
 from mbvat.utils import COMMON_RESOLUTIONS,MBVATItem,CircleObject,RectangleObject,Position,Resolution,NoneObject,BasicObject,TriangleObject
-from mbvat.utils import calculate_color_delta
+from mbvat.utils import delta_e_cie2000
 
 
 def build_full_localization_test(
@@ -95,9 +96,16 @@ def build_full_localization_test(
                             color1.append((0,0,0))
                             color2.append((255,255,255))
                 # print(len(objs_type),len(shifted_points),len(objs_area),len(color1),len(color2))
+                color1_lab = colour.XYZ_to_Lab(colour.sRGB_to_XYZ(np.array(color1)/255))
+                color2_lab = colour.XYZ_to_Lab(colour.sRGB_to_XYZ(np.array(color2)/255))
 
-                for otype,point,area,c1,c2 in zip(objs_type,shifted_points,objs_area,color1,color2):
+                delta_e_l = delta_e_cie2000(color1_lab,color2_lab)
+                
+                for otype,point,area,c1,c2,delta_e in zip(objs_type,shifted_points,objs_area,color1,color2,delta_e_l):
 
+                    if delta_e < 3 and otype != NoneObject:
+                        continue # Too similar colors that are hard to distinguish
+                    
                     if otype == RectangleObject:
                         # rectangle
                         # center point must be the `point`
@@ -150,10 +158,7 @@ def build_full_localization_test(
                         obj_height = int(area / obj_width)
                         obj = TriangleObject(width=obj_width, height=obj_height, color=c1, bbox=[
                                             0, 0, obj_width, obj_height])
-                    delta_e = calculate_color_delta(c1/255,c2/255)
-                    if delta_e < 3 and otype != NoneObject:
-                        continue # Too similar colors that are hard to distinguish
-                    
+
                     # print(max(point[0]-obj.bbox[2]//2,0))
                     dataset[res][ws].append(MBVATItem(
                         res=Resolution(width=width,height=height),
