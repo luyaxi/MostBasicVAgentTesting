@@ -223,7 +223,7 @@ def draw_color_coverage(
         passed_colors_similarities = color_similarity_matrix[labels][:, labels]
         
         # now try to merge adjacent colors to reduce the number of points
-        similar_counts = np.mean(passed_colors_similarities < similarity_threshold, axis=-1)
+        similar_counts = np.sum(passed_colors_similarities < similarity_threshold, axis=-1)
         
         merged_colors = []
         merged_colors_size = []
@@ -234,7 +234,7 @@ def draw_color_coverage(
             max_idx = np.argmax(similar_counts)
             similar_counts[max_idx] = -1
             similar_indices = np.where(passed_colors_similarities[max_idx] < similarity_threshold)[0]
-            merged_colors.append(np.mean(passed_colors_uv[similar_indices],axis=-1))
+            merged_colors.append(np.mean(passed_colors_uv[similar_indices],axis=0))
             
             merged_colors_size.append(len(similar_indices))
         
@@ -242,12 +242,12 @@ def draw_color_coverage(
             merged_colors.append(passed_colors_uv[idx])
             merged_colors_size.append(1)
         
-        merged_colors = np.array(merged_colors)
+        merged_colors = np.asarray(merged_colors)
         merged_colors_size = np.array(merged_colors_size)
         
         # obtain color according to Luv
-        XYZ = colour.Luv_to_XYZ(np.concatenate([50*np.ones((len(merged_colors),1)),merged_colors],axis=-1))
-        RGB = colour.XYZ_to_sRGB(XYZ / 100)
+        XYZ = colour.xy_to_XYZ(colour.Luv_uv_to_xy(merged_colors))
+        RGB = colour.XYZ_to_sRGB(XYZ)
         # 确保 RGB 值在 [0, 1] 范围内
         RGB = np.clip(RGB, 0, 1)
 
@@ -257,7 +257,7 @@ def draw_color_coverage(
             merged_colors[:,1],
             c=RGB,  # Use CIE colors for coloring
             edgecolors="none",
-            s=merged_colors_size,
+            s=merged_colors_size*30,
             alpha=1,
             label='Passed Foreground Colors',
             zorder=1000  # Ensure it's above everything
@@ -265,7 +265,12 @@ def draw_color_coverage(
     
     else:
         # only be considered as failed if all similiar color are failed
-        failed_indices = np.logical_not(labels)
+        # if one of them is passed, then it is a passed color
+        
+        failed_indices = ~labels
+        
+        similar_success = np.sum((color_similarity_matrix < similarity_threshold)*labels.reshape(1,-1),axis=-1) > 0
+        failed_indices = np.logical_or(labels, similar_success)
         
         # Plot failed foreground colors with grey color and some transparency
         ax.scatter(
