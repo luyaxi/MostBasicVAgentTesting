@@ -68,8 +68,8 @@ def draw_res_correctness(
                 true_counts[xi, yi] += 1
 
     # 获取每个单元内最小delta e并绘制在图上
-    for xj in range(max(x_inds)+1):
-        for yj in range(max(y_inds)+1):
+    for xj in range(len(x_bins)-1):
+        for yj in range(len(y_bins)-1):
             x_center = (x_bins[xj] + x_bins[xj+1]) / 2
             y_center = (y_bins[yj] + y_bins[yj+1]) / 2
             
