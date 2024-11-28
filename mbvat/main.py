@@ -7,18 +7,22 @@ from mbvat.build_testset import LocalizationTester,MBVATItem,Position,ColorTeste
 from mbvat.completions import create_localization_messages,extract_point,create_color_messages,extract_shape,random_pointer,random_shape
 from mbvat.visualization import draw_color_coverage,draw_res_correctness
 
+BASE_URL = "http://localhost:8000/v1"
+API_KEY = "sk-1234"
+MODEL_NAME = "qwen2vl"
+
 sem = asyncio.Semaphore(32)
 async def qwen_localization_completions(item:MBVATItem)->Position:
     async with sem:
         messages = create_localization_messages(item)
         from openai import AsyncOpenAI
         client = AsyncOpenAI(
-            api_key="sk-1234",
-            base_url="http://localhost:8000/v1"
+            api_key=API_KEY,
+            base_url=BASE_URL
         )
         response = await client.chat.completions.create(
             messages=messages,
-            model="qwen2vl",
+            model=MODEL_NAME,
             # logprobs=True,
             # top_logprobs=20,
         )
@@ -33,12 +37,12 @@ async def qwen_color_completions(item:MBVATItem)->str:
         messages = create_color_messages(item)
         from openai import AsyncOpenAI
         client = AsyncOpenAI(
-            api_key="sk-1234",
-            base_url="http://localhost:8000/v1"
+            api_key=API_KEY,
+            base_url=BASE_URL
         )
         response = await client.chat.completions.create(
             messages=messages,
-            model="qwen2vl",
+            model=MODEL_NAME,
             # logprobs=True,
             # top_logprobs=20,
         )
@@ -54,8 +58,19 @@ def main(
     random_test:bool = False,
     save_path:str = "results",
     max_repeat_times:int = 5,
+    base_url: str = "http://localhost:8000/v1",
+    api_key: str = "sk-1234",
+    model:str = "qwen2vl"
 ):
-    
+    if base_url is not None:
+        BASE_URL = base_url
+    if api_key is not None:
+        API_KEY = api_key
+    if model is not None:
+        MODEL_NAME = model
+
+    os.makedirs(save_path,exist_ok=True)
+
     match test:
         case "localization":
             tester = LocalizationTester(max_repeat_times=max_repeat_times)

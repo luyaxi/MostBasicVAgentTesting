@@ -1,0 +1,9 @@
+numpy
+matplotlib
+scipy
+colour-science
+pillow
+pydantic
+colormath
+tqdm
+fire
