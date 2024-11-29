@@ -95,6 +95,9 @@ def main(
         async for statics in tester.run(completion_func):
             idx+=1
             print(statics["meta"])
+            if len(statics["results"]["test"])==0:
+                print("Warning: No test results")
+                continue
             draw_res_correctness(statics, save_path=os.path.join(save_path,f"{idx}_loc.png"))
             if tester.colorful:
                 draw_color_coverage(statics, save_path=os.path.join(save_path,f"{idx}_color.png"))
