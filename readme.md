@@ -53,7 +53,7 @@ If you find this project useful, please kindly cite it in your publications.
 
 ```bibtex
 @misc{mbvat,
-  author = {Qwen Huang},
+  author = {Yaxi Lu},
   title = {MBVAT: Most Basic Vision Agent Testing},
   year = {2021},
   publisher = {GitHub},
