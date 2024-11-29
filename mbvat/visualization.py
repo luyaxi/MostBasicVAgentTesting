@@ -64,25 +64,39 @@ def draw_res_correctness(
             if label:
                 true_counts[xi, yi] += 1
 
-    # 获取每个单元内最小delta e并绘制在图上
-    for xj in range(len(x_bins)-1):
-        for yj in range(len(y_bins)-1):
-            x_center = (x_bins[xj] + x_bins[xj+1]) / 2
-            y_center = (y_bins[yj] + y_bins[yj+1]) / 2
+    if statics["meta"].get("Colorful", True):
+        # 获取每个单元内最小delta e并绘制在图上
+        for xj in range(len(x_bins)-1):
+            for yj in range(len(y_bins)-1):
+                x_center = (x_bins[xj] + x_bins[xj+1]) / 2
+                y_center = (y_bins[yj] + y_bins[yj+1]) / 2
 
-            # obtain the minimum delta e in the window
-            window_colors = []
-            box_elems = np.logical_and(x_inds == xj, y_inds == yj)
-            for idx in np.where(box_elems)[0]:
-                item = statics["results"]["test"][idx]
-                window_colors.append(item.delta_e)
+                # obtain the minimum delta e in the window
+                window_colors = []
+                box_elems = np.logical_and(x_inds == xj, y_inds == yj)
+                for idx in np.where(box_elems)[0]:
+                    item = statics["results"]["test"][idx]
+                    window_colors.append(item.delta_e)
 
-            if len(window_colors) == 0:
-                continue
-            min_delta_e = np.min(window_colors)
+                if len(window_colors) == 0:
+                    continue
+                min_delta_e = np.min(window_colors)
 
-            plt.text(x_center, y_center, f'{min_delta_e:0.1f}',
-                     ha='center', va='center', fontsize=8, color='black')
+                plt.text(x_center, y_center, f'{min_delta_e:0.1f}',
+                        ha='center', va='center', fontsize=8, color='black')
+    else:
+        # 获取每个单元格内测试点的数量并绘制在图上
+        for xj in range(len(x_bins)-1):
+            for yj in range(len(y_bins)-1):
+                x_center = (x_bins[xj] + x_bins[xj+1]) / 2
+                y_center = (y_bins[yj] + y_bins[yj+1]) / 2
+
+                # 获取窗口内测试点的数量
+                window_count = total_counts[xj, yj]
+
+                plt.text(x_center, y_center, f'{window_count}',
+                        ha='center', va='center', fontsize=8, color='black')
+
 
     # 计算正确率：True 的比例
     accuracy = np.divide(
