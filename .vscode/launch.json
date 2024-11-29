@@ -27,6 +27,22 @@
                 "--test",
                 "color"
             ]
-        }
+        },
+        {
+            "name": "测试程序-MiniCPM定位",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mbvat.main",
+            "args": [
+                "--random-test",
+                "False",
+                "--test",
+                "localization",
+                "--model",
+                "minicpmv",
+                // "--template-type",
+                // "minicpm"
+            ]
+        },
     ]
 }

@@ -10,11 +10,13 @@ from mbvat.visualization import draw_color_coverage,draw_res_correctness
 BASE_URL = "http://localhost:8000/v1"
 API_KEY = "sk-1234"
 MODEL_NAME = "qwen2vl"
+TEMPLATE_TYPE = "qwen"
 
 sem = asyncio.Semaphore(32)
-async def qwen_localization_completions(item:MBVATItem)->Position:
+async def localization_completions(item:MBVATItem)->Position:
     async with sem:
-        messages = create_localization_messages(item)
+        
+        messages = create_localization_messages(item,TEMPLATE_TYPE)
         from openai import AsyncOpenAI
         client = AsyncOpenAI(
             api_key=API_KEY,
@@ -23,18 +25,19 @@ async def qwen_localization_completions(item:MBVATItem)->Position:
         response = await client.chat.completions.create(
             messages=messages,
             model=MODEL_NAME,
+            temperature=0,
             # logprobs=True,
             # top_logprobs=20,
         )
 
         response = response.choices[0].message.content
         # extract the point
-        point = extract_point(response,item.res.width,item.res.height)
+        point = extract_point(response,item.res.width,item.res.height,type=TEMPLATE_TYPE)
         return point
 
-async def qwen_color_completions(item:MBVATItem)->str:
+async def color_completions(item:MBVATItem)->str:
     async with sem:
-        messages = create_color_messages(item)
+        messages = create_color_messages(item,type=TEMPLATE_TYPE)
         from openai import AsyncOpenAI
         client = AsyncOpenAI(
             api_key=API_KEY,
@@ -43,13 +46,14 @@ async def qwen_color_completions(item:MBVATItem)->str:
         response = await client.chat.completions.create(
             messages=messages,
             model=MODEL_NAME,
+            temperature=0,
             # logprobs=True,
             # top_logprobs=20,
         )
 
         response = response.choices[0].message.content
         # extract the shape
-        shape = extract_shape(response)
+        shape = extract_shape(response,type=TEMPLATE_TYPE)
         return shape
 
 
@@ -58,32 +62,35 @@ def main(
     random_test:bool = False,
     save_path:str = "results",
     max_repeat_times:int = 5,
-    base_url: str = "http://localhost:8000/v1",
-    api_key: str = "sk-1234",
-    model:str = "qwen2vl"
+    base_url: str = None,
+    api_key: str = None,
+    model:str = None,
+    template_type:str = None
 ):
-    global BASE_URL,API_KEY,MODEL_NAME
+    global BASE_URL,API_KEY,MODEL_NAME,TEMPLATE_TYPE
     if base_url is not None:
         BASE_URL = base_url
     if api_key is not None:
         API_KEY = api_key
     if model is not None:
         MODEL_NAME = model
+    if template_type is not None:
+        TEMPLATE_TYPE = template_type
 
     os.makedirs(save_path,exist_ok=True)
 
     match test:
         case "localization":
             tester = LocalizationTester(max_repeat_times=max_repeat_times)
-            completion_func = qwen_localization_completions if not random_test else random_pointer
+            completion_func = localization_completions if not random_test else random_pointer
 
         case "localization_colorful":
             tester = LocalizationTester(max_repeat_times=max_repeat_times,colorful=True)
-            completion_func = qwen_localization_completions if not random_test else random_pointer
+            completion_func = localization_completions if not random_test else random_pointer
 
         case "color":
             tester = ColorTester(max_repeat_times=max_repeat_times)
-            completion_func = qwen_color_completions if not random_test else random_shape
+            completion_func = color_completions if not random_test else random_shape
 
         case _:
             raise ValueError(f"Unkown test {test}")
