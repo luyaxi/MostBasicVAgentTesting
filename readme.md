@@ -58,6 +58,6 @@ If you find this project useful, please kindly cite it in your publications.
   year = {2021},
   publisher = {GitHub},
   journal = {GitHub repository},
-  url = {https://github.com/luyaxi/MostBasicVLMTesting}
+  url = {https://github.com/luyaxi/MostBasicVAgentTesting}
 }
 ```
